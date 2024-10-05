@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Audio Stream</title>
+</head>
+<body>
+    <h1>WebSocket Audio Streaming</h1>
+    <button id="start">Start Streaming</button>
+    <button id="stop" disabled>Stop Streaming</button>
+
+    <script>
+        const socket = new WebSocket('ws://localhost:3000'); // Change to ngrok URL if using ngrok
+        let mediaRecorder;
+
+        socket.onopen = () => {
+            console.log('WebSocket connection established');
+        };
+
+        socket.onerror = (error) => {
+            console.error('WebSocket error:', error);
+        };
+
+        socket.onclose = () => {
+            console.log('WebSocket connection closed');
+        };
+
+        socket.onmessage = (event) => {
+            console.log('Received audio data size:', event.data.size);
+            const audioBlob = new Blob([event.data], { type: 'audio/webm' });
+            const audioUrl = URL.createObjectURL(audioBlob);
+            const audio = new Audio(audioUrl);
+            
+            // Log before playing
+            console.log('Playing audio:', audioUrl);
+            
+            audio.play().catch(error => {
+                console.error('Playback error:', error);
+            });
+        };
+
+        document.getElementById('start').onclick = () => {
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(stream => {
+                    console.log('Microphone access granted');
+                    mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm; codecs=opus' });
+                    mediaRecorder.start();
+
+                    mediaRecorder.ondataavailable = (event) => {
+                        console.log('Data available:', event.data.size);
+                        if (event.data.size > 0) {
+                            socket.send(event.data); // Send audio chunk over WebSocket
+                        }
+                    };
+
+                    mediaRecorder.onstop = () => {
+                        socket.close(); // Close the connection when done
+                    };
+
+                    document.getElementById('stop').disabled = false;
+                })
+                .catch(error => {
+                    console.error('Error accessing media devices.', error);
+                });
+            
+            document.getElementById('start').disabled = true;
+        };
+
+        document.getElementById('stop').onclick = () => {
+            if (mediaRecorder) {
+                mediaRecorder.stop();
+                document.getElementById('start').disabled = false;
+                document.getElementById('stop').disabled = true;
+            }
+        };
+    </script>
+</body>
+</html>

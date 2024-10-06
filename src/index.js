@@ -1,33 +1,37 @@
-const express = require('express');
 const WebSocket = require('ws');
-const http = require('http');
+const fs = require('fs');
 
-const app = express();
-const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+const server = new WebSocket.Server({ port: 8080 });
 
-app.get('/', (req, res) => {
-    res.sendFile(__dirname + '/index.html');
+// Store received audio chunks in a buffer
+let audioBuffer = [];
+
+// Handle new WebSocket connections
+server.on('connection', (ws) => {
+  console.log('Client connected');
+
+  // Handle incoming binary data (audio chunks)
+  ws.on('message', (message, isBinary) => {
+    if (isBinary) {
+      console.log(`Received audio chunk of size: ${message.length}`);
+      audioBuffer.push(message); // Store the binary audio chunks
+
+      // Send confirmation message
+      ws.send('Audio chunk received');
+    }
+  });
+
+  ws.on('close', () => {
+    console.log('Client disconnected');
+
+    // Optionally, you can save the received audio buffer to a file or process it
+    const audioFile = Buffer.concat(audioBuffer);
+    fs.writeFileSync('received_audio.wav', audioFile); // Save the audio as a .wav file
+    console.log('Saved audio as "received_audio.wav"');
+    
+    // Clear the buffer after saving
+    audioBuffer = [];
+  });
 });
 
-wss.on('connection', (ws) => {
-    console.log('Client connected');
-
-    ws.on('message', (message) => {
-        // Echo the audio data back to all connected clients
-        wss.clients.forEach((client) => {
-            if (client.readyState === WebSocket.OPEN) {
-                client.send(message);
-            }
-        });
-    });
-
-    ws.on('close', () => {
-        console.log('Client disconnected');
-    });
-});
-
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`Server is listening on port ${PORT}`);
-});
+console.log('WebSocket server running on ws://localhost:8080');
